@@ -48,7 +48,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.rememberAsyncImagePainter
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Scale
+import coil.size.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -119,7 +122,14 @@ enum class Screen(val label: String, val icon: @Composable () -> Unit) {
 
 @Composable
 fun MainApp(intent: Intent? = null) {
-    var selectedScreen by remember { mutableStateOf(Screen.Upload) }
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("zipline_prefs", Context.MODE_PRIVATE) }
+    val hasConfig = remember {
+        val token = prefs.getString("auth_token", "") ?: ""
+        val url = prefs.getString("api_url", "") ?: ""
+        token.isNotBlank() && url.isNotBlank()
+    }
+    var selectedScreen by remember { mutableStateOf(if (hasConfig) Screen.Upload else Screen.Settings) }
 
     Scaffold(
         bottomBar = {
@@ -161,6 +171,7 @@ fun UploadScreen(intent: Intent? = null) {
 
     val authToken = prefs.getString("auth_token", "") ?: ""
     val apiBaseUrl = prefs.getString("api_url", "") ?: ""
+    val uploadPath = prefs.getString("upload_path", "/api/upload") ?: "/api/upload"
 
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var isUploading by remember { mutableStateOf(false) }
@@ -269,8 +280,13 @@ fun UploadScreen(intent: Intent? = null) {
                                 .clip(RoundedCornerShape(12.dp))
                                 .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                         ) {
-                            Image(
-                                painter = rememberAsyncImagePainter(imageUri),
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(imageUri)
+                                    .size(Size.ORIGINAL)
+                                    .scale(Scale.FILL_BOUNDS)
+                                    .crossfade(true)
+                                    .build(),
                                 contentDescription = "Selected image",
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
@@ -324,7 +340,7 @@ fun UploadScreen(intent: Intent? = null) {
 
                     scope.launch {
                         try {
-                            val result = uploadImage(context, imageUri!!, authToken, apiBaseUrl)
+                            val result = uploadImage(context, imageUri!!, authToken, apiBaseUrl, uploadPath)
                             resultLink = result
                             val historyJson = prefs.getString("history", "[]") ?: "[]"
                             val arr = JSONArray(historyJson)
@@ -500,10 +516,14 @@ fun HistoryScreen() {
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("zipline_prefs", Context.MODE_PRIVATE) }
     var authToken by remember { mutableStateOf(prefs.getString("auth_token", "") ?: "") }
     var showToken by remember { mutableStateOf(false) }
     var apiUrl by remember { mutableStateOf(prefs.getString("api_url", "") ?: "") }
+    var uploadPath by remember { mutableStateOf(prefs.getString("upload_path", "/api/upload") ?: "/api/upload") }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -575,8 +595,76 @@ fun SettingsScreen() {
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline
                     )
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Upload Endpoint", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = 8.dp))
+                OutlinedTextField(
+                    value = uploadPath,
+                    onValueChange = { newValue ->
+                        uploadPath = newValue
+                        prefs.edit().putString("upload_path", newValue).apply()
+                    },
+                    label = { Text("Path") },
+                    placeholder = { Text("/api/upload") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    )
+                )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Upload endpoint: {url}/api/upload", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Full endpoint: ${apiUrl.trimEnd('/')}${uploadPath}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        if (apiUrl.isBlank() || authToken.isBlank()) {
+                            testResult = "Set server URL and auth token first"
+                            return@OutlinedButton
+                        }
+                        isTesting = true
+                        testResult = null
+                        scope.launch {
+                            try {
+                                val testUrl = apiUrl.trimEnd('/') + uploadPath.trimEnd('/')
+                                val request = Request.Builder()
+                                    .url(testUrl)
+                                    .addHeader("Authorization", authToken)
+                                    .head()
+                                    .build()
+                                val client = OkHttpClient.Builder()
+                                    .connectTimeout(10, TimeUnit.SECONDS)
+                                    .readTimeout(10, TimeUnit.SECONDS)
+                                    .build()
+                                val response = client.newCall(request).execute()
+                                testResult = if (response.isSuccessful || response.code == 405) {
+                                    "Connection successful (${response.code})"
+                                } else {
+                                    "Failed: ${response.code} ${response.message}"
+                                }
+                            } catch (e: Exception) {
+                                testResult = "Error: ${e.message ?: "Connection failed"}"
+                            } finally {
+                                isTesting = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = !isTesting && apiUrl.isNotBlank() && authToken.isNotBlank()
+                ) {
+                    if (isTesting) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testing...", fontSize = 13.sp)
+                    } else {
+                        Text("Test Connection", fontSize = 13.sp)
+                    }
+                }
+                testResult?.let { result ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(result, fontSize = 12.sp, color = if (result.startsWith("Connection") || result.startsWith("Success")) Color(0xFF16A34A) else MaterialTheme.colorScheme.error)
+                }
             }
         }
 
@@ -598,7 +686,7 @@ fun SettingsScreen() {
     }
 }
 
-suspend fun uploadImage(context: Context, uri: Uri, token: String, apiBaseUrl: String): String {
+suspend fun uploadImage(context: Context, uri: Uri, token: String, apiBaseUrl: String, uploadPath: String = "/api/upload"): String {
     return withContext(Dispatchers.IO) {
         val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
         val extension = when {
@@ -615,7 +703,7 @@ suspend fun uploadImage(context: Context, uri: Uri, token: String, apiBaseUrl: S
             }
         }
 
-        val uploadUrl = apiBaseUrl.trimEnd('/') + "/api/upload"
+        val uploadUrl = apiBaseUrl.trimEnd('/') + "/" + uploadPath.trimStart('/')
 
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
