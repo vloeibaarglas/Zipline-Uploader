@@ -25,4 +25,4 @@ Kotlin, Jetpack Compose, Material 3, OkHttp, Coil, GitHub Actions CI/CD.
 
 ## License
 
-MIT
+[MIT](https://github.com/vloeibaarglas/Zipline-Uploader/blob/main/LICENSE)
