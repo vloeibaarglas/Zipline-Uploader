@@ -1,4 +1,4 @@
-package com.e401.imageupload
+package com.min.zipline.uploader
 
 import android.content.ClipData
 import android.content.ClipboardManager
