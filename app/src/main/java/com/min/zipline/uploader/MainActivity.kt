@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import coil.size.Scale
 import coil.size.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -284,7 +283,6 @@ fun UploadScreen(intent: Intent? = null) {
                                 model = ImageRequest.Builder(context)
                                     .data(imageUri)
                                     .size(Size.ORIGINAL)
-                                    .scale(Scale.FILL_BOUNDS)
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = "Selected image",
