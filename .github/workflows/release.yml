@@ -48,11 +48,14 @@ jobs:
           KEY_PASSWORD: zipline123
         run: ./gradlew assembleRelease
 
+      - name: Rename APK with version
+        run: cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/zipline-upload-${{ github.event.inputs.version }}.apk
+
       - name: Upload Release APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zipline-upload-release
-          path: app/build/outputs/apk/release/app-release.apk
+          name: zipline-upload-${{ github.event.inputs.version }}
+          path: app/build/outputs/apk/release/zipline-upload-${{ github.event.inputs.version }}.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -70,7 +73,7 @@ jobs:
             1. Download the APK below
             2. Enable "Install from unknown sources" on your device
             3. Open the APK to install
-          files: app/build/outputs/apk/release/app-release.apk
+          files: app/build/outputs/apk/release/zipline-upload-${{ github.event.inputs.version }}.apk
           draft: false
           prerelease: false
         env:
