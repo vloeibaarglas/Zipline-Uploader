@@ -4,7 +4,7 @@ Minimal Android image uploader for [Zipline](https://zipline.diced.sh) servers. 
 
 ## Stack
 
-Kotlin, Jetpack Compose, Material 3, OkHttp, Coil, GitHub Actions CI/CD.
+Kotlin, Jetpack Compose, Material 3, OkHttp, Coil
 
 ## Building
 
