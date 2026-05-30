@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.e401.imageupload"
+    namespace = "com.min.zipline.uploader"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.e401.imageupload"
+        applicationId = "com.min.zipline.uploader"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
     }
 
     signingConfigs {
